@@ -1,21 +1,21 @@
 package ezGmail
 
 import (
-        "encoding/json"
-	"encoding/base64"
-        "fmt"
-        "io/ioutil"
-        "log"
-        "net/http"
         "net/url"
-        "os"
-        "os/user"
-        "path/filepath"
 	"strings"
-	
+        "net/http"
+        "os"
+        "log"
+        "encoding/json"
+        "golang.org/x/oauth2/google"
         "golang.org/x/net/context"
         "golang.org/x/oauth2"
-        "golang.org/x/oauth2/google"
+	"encoding/base64"
+        "path/filepath"
+        "io/ioutil"
+        "os/user"
+	"time"
+        "fmt"
         "google.golang.org/api/gmail/v1"
 )
 
@@ -167,7 +167,7 @@ func (gm *GmailMessage) parseMessagePart(origmsg *gmail.MessagePart, gs *GmailSe
 	for _, ii := range(origmsg.Headers) {
 		if ii.Name == "Subject" { gm.sSubject = ii.Value }
 		if ii.Name == "Content-Disposition" { contentDisp = ii.Value }
-		if ii.Name == "Message-ID" { gm.sMessageId = ii.Value }
+		if ii.Name == "From" { gm.sFrom = ii.Value }
 	}
 	if strings.HasPrefix(origmsg.MimeType,"multipart") {
 		for _, ii := range(origmsg.Parts) {
@@ -196,6 +196,9 @@ func (gs *GmailService) GetMessages() []*GmailMessage {
 	var gmessages []*GmailMessage
 	for _, ii := range messages {
 		var m = new(GmailMessage)
+		m.sThreadId = ii.ThreadId
+		m.sMessageId = ii.Id
+		m.sDate     = time.Unix(0, ii.InternalDate * int64(time.Millisecond))
 		m.parseMessagePart(ii.Payload, gs)
 		gmessages = append(gmessages, m)
 	}
@@ -231,7 +234,7 @@ func (gs *GmailService) GetListOnly () *gmail.ListMessagesResponse {
 	if len(gs.sSmaller)         > 0 { qStr += "smaller:"		+ gs.sSmaller		+ " "	}
 	if len(gs.sFilename)        > 0 { qStr += "filename:\""		+ gs.sFilename		+ "\" " }
 	if len(gs.sMatch)           > 0 { qStr += " "			+ gs.sMatch		+ " "	}
-	if len(gs.sMatchExact)      > 0 { qStr += " "                   + gs.sMatchExact	+ " "	}
+	if len(gs.sMatchExact)      > 0 { qStr += " \""                 + gs.sMatchExact	+ "\" "	}
 	if gs.sHasAttachment            { qStr += "has:attachment "					}
 	if len(qStr) > 0 { gsCall = gsCall.Q(qStr) }
 	do, err := gsCall.Do()
@@ -271,7 +274,10 @@ func (ga *GmailAttachment) GetData() []byte {
 
 type GmailMessage struct {
 	sRaw             *gmail.Message
+	sDate             time.Time
 	sMessageId        string
+	sThreadId         string
+	sFrom             string
 	sSubject          string
 	sBodyHtml         []byte
 	sBodyText         []byte
@@ -285,9 +291,12 @@ func (gm *GmailMessage) HasSubject	() bool			{ return len(gm.sSubject)	> 0	}
 func (gm *GmailMessage) HasBodyHtml	() bool			{ return len(gm.sBodyHtml)	> 0	}
 func (gm *GmailMessage) HasBodyText	() bool			{ return len(gm.sBodyText)	> 0	}
 func (gm *GmailMessage) HasAttachments	() bool			{ return len(gm.lAttachment)	> 0	}
+func (gm *GmailMessage) GetFrom 	() string		{ return gm.sFrom			}
 func (gm *GmailMessage) GetSubject	() string		{ return gm.sSubject			}
 func (gm *GmailMessage) GetBodyText	() []byte		{ return gm.sBodyText			}
 func (gm *GmailMessage) GetBodyHtml	() []byte		{ return gm.sBodyHtml			}
 func (gm *GmailMessage) GetAttachments	() []*GmailAttachment	{ return gm.lAttachment			}
-func (gm *GmailMessage) GetRawMessage	() *gmail.Message	{ return gm.sRaw			}
+func (gm *GmailMessage) GetRawMessage	() *gmail.Message	{ return gm.sRaw		        }
 func (gm *GmailMessage) GetMessageId	() string               { return gm.sMessageId                  }
+func (gm *GmailMessage) GetThreadId	() string               { return gm.sThreadId                   }
+func (gm *GmailMessage) GetDate         () time.Time            { return gm.sDate                       }
