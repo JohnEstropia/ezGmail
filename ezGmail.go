@@ -113,6 +113,10 @@ type GmailService struct {
         sMatch           string
         sMatchExact      string
 	sHasAttachment   bool
+	//result management
+	sNextPageToken   string
+	iResultsRecd     int64  //TODO: make accessible
+	iResultsEstimate int64  //TODO: make accessible
 }
 
 func (gs *GmailService) InitSrv() {
@@ -192,7 +196,7 @@ func (gm *GmailMessage) parseMessagePart(origmsg *gmail.MessagePart, gs *GmailSe
 }
 
 func (gs *GmailService) GetMessages() []*GmailMessage {
-	messages  := gs.GetMessagesRaw()
+	messages  := gs.GetMessagesRaw("")
 	var gmessages []*GmailMessage
 	for _, ii := range messages {
 		var m = new(GmailMessage)
@@ -205,9 +209,30 @@ func (gs *GmailService) GetMessages() []*GmailMessage {
 	return gmessages
 }
 
-func (gs *GmailService) GetMessagesRaw() []*gmail.Message {
+func (gs *GmailService) GetResultsEstimate () int64 { return gs.iResultsEstimate }
+func (gs *GmailService) GetResultsRecd     () int64 { return gs.iResultsRecd     }
+
+func (gs *GmailService) HasNextPage() bool {
+	return len(gs.sNextPageToken) > 0
+}
+
+func (gs *GmailService) GetMessagesNextPage() []*GmailMessage {
+	messages  := gs.GetMessagesRaw(gs.sNextPageToken)
+	var gmessages []*GmailMessage
+	for _, ii := range messages {
+		var m = new(GmailMessage)
+		m.sThreadId = ii.ThreadId
+		m.sMessageId = ii.Id
+		m.sDate     = time.Unix(0, ii.InternalDate * int64(time.Millisecond))
+		m.parseMessagePart(ii.Payload, gs)
+		gmessages = append(gmessages, m)
+	}
+	return gmessages
+}
+
+func (gs *GmailService) GetMessagesRaw(_pageToken string) []*gmail.Message {
 	var messages []*gmail.Message
-	for _, ii := range (gs.GetListOnly().Messages) {
+	for _, ii := range (gs.getListOnly(_pageToken).Messages) {
 		m, err := gs.srv.Users.Messages.Get(gs.sUser, ii.Id).Do()
 		if err != nil {
 			log.Fatalf("Unable to retrieve email messages %v", err)
@@ -217,7 +242,7 @@ func (gs *GmailService) GetMessagesRaw() []*gmail.Message {
 	return messages
 }
 
-func (gs *GmailService) GetListOnly () *gmail.ListMessagesResponse {
+func (gs *GmailService) getListOnly (_pageToken string) *gmail.ListMessagesResponse {
 	qStr   := ""
 	gsCall := gs.srv.Users.Messages.List(gs.sUser).MaxResults(gs.iMaxResults)
 	if len(gs.sLabel)           > 0 { gsCall = gsCall.LabelIds(gs.sLabel) }
@@ -237,10 +262,14 @@ func (gs *GmailService) GetListOnly () *gmail.ListMessagesResponse {
 	if len(gs.sMatchExact)      > 0 { qStr += " \""                 + gs.sMatchExact	+ "\" "	}
 	if gs.sHasAttachment            { qStr += "has:attachment "					}
 	if len(qStr) > 0 { gsCall = gsCall.Q(qStr) }
+	if len(_pageToken) > 0 { gsCall.PageToken(_pageToken) }
 	do, err := gsCall.Do()
         if err != nil {
                 log.Fatalf("Unable to retrieve email list %v", err)
         }
+	gs.sNextPageToken    = do.NextPageToken
+	gs.iResultsEstimate  = do.ResultSizeEstimate
+	gs.iResultsRecd     += int64(len(do.Messages))
 	return do
 }
 
