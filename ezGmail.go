@@ -119,11 +119,11 @@ type GmailService struct {
 	iResultsEstimate int64  //TODO: make accessible
 }
 
-func (gs *GmailService) InitSrv() {
+func (gs *GmailService) InitSrv(clientsecret string) {
 	// Connect and create gmail.Service object
         ctx := context.Background()
 
-        b, err := ioutil.ReadFile("client_secret.json")
+        b, err := ioutil.ReadFile(clientsecret)
         if err != nil {
                 log.Fatalf("Unable to read client secret file: %v", err)
         }
