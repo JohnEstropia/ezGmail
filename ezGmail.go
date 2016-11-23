@@ -21,8 +21,8 @@ import (
 
 // getClient uses a Context and Config to retrieve a Token
 // then generate a Client. It returns the generated Client.
-func getClient(ctx context.Context, config *oauth2.Config) *http.Client {
-        cacheFile, err := tokenCacheFile()
+func getClient(ctx context.Context, config *oauth2.Config, clientsecret string) *http.Client {
+        cacheFile, err := tokenCacheFile(clientstring)
         if err != nil {
                 log.Fatalf("Unable to get path to cached credential file. %v", err)
         }
@@ -56,7 +56,7 @@ func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 
 // tokenCacheFile generates credential file path/filename.
 // It returns the generated credential path/filename.
-func tokenCacheFile() (string, error) {
+func tokenCacheFile(clientsecret string) (string, error) {
         usr, err := user.Current()
         if err != nil {
                 return "", err
@@ -64,7 +64,7 @@ func tokenCacheFile() (string, error) {
         tokenCacheDir := filepath.Join(usr.HomeDir, ".ezGmail")
         os.MkdirAll(tokenCacheDir, 0700)
         return filepath.Join(tokenCacheDir,
-                url.QueryEscape("ezGmail.json")), err
+		url.QueryEscape("token."+filepath.Base(clientsecret))), err
 }
 
 // tokenFromFile retrieves a Token from a given file path.
@@ -132,7 +132,7 @@ func (gs *GmailService) InitSrv(clientsecret string) {
         if err != nil {
                 log.Fatalf("Unable to parse client secret file to config: %v", err)
         }
-        client := getClient(ctx, config)
+        client := getClient(ctx, config, clientsecret)
 
         gs.srv, err = gmail.New(client)
         if err != nil {
